@@ -1,0 +1,8 @@
+langchain-core
+langgraph
+langchain-openai
+langchain-ollama
+langchain-chroma
+ultralytics
+pydantic
+python-dotenv

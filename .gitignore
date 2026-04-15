@@ -1,0 +1,23 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Local data/artifacts
+chroma_db/
+models/*.pt
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
