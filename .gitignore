@@ -13,8 +13,12 @@ env/
 !.env.example
 
 # Local data/artifacts
-chroma_db/
-models/*.pt
+chroma_db/*
+!chroma_db/.gitkeep
+!chroma_db/README.md
+models/*
+!models/.gitkeep
+!models/README.md
 
 # OS/editor files
 .DS_Store
