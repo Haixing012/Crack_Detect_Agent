@@ -16,6 +16,7 @@ env/
 chroma_db/*
 !chroma_db/.gitkeep
 !chroma_db/README.md
+temp_uploads/
 models/*
 !models/.gitkeep
 !models/README.md

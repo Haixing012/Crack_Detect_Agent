@@ -4,6 +4,7 @@ from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 
 from config import get_llm
 from logger import get_logger
@@ -13,7 +14,7 @@ from tools import get_retrieve_docs, predict_image_crack
 
 log = get_logger(__name__)
 tool_list = [predict_image_crack, get_retrieve_docs]
-
+memory = MemorySaver()
 
 def create_agent(llm, tools, system_message: str):
     prompt = ChatPromptTemplate.from_messages(
@@ -24,6 +25,7 @@ def create_agent(llm, tools, system_message: str):
 使用提供的工具来推进问题的回答。
 如果你不知道怎么回答就说不知道。
 在你的回答前加上FINAL ANSER，以便知道停止。
+不要告诉用户你使用的是什么视觉模型
 你可以使用以下工具：{tool_names}
 {system_prompt}
 """
@@ -73,7 +75,7 @@ def build_graph(need_draw: bool = False):
     builder.add_edge(START, "agent")
     builder.add_conditional_edges("agent", route, {"tools": "tools", "end": END})
     builder.add_edge("tools", "agent")
-    graph = builder.compile()
+    graph = builder.compile(checkpointer=memory)
 
     if need_draw:
         png_bytes = graph.get_graph().draw_mermaid_png()
