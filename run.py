@@ -1,11 +1,14 @@
 from graph import build_graph
 from logger import get_logger
-
+from config import get_cloud_llm,get_local_llm
 
 log = get_logger(__name__)
 
 
 def main() -> None:
+    # 启动时主动预热，提前将模型加载到内存
+    get_local_llm()
+    get_cloud_llm()
     app = build_graph()
     chat_history = []
 

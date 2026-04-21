@@ -21,3 +21,5 @@ class RoadDiseaseState(TypedDict):
     retrieved_docs: str  # RAG检索到的对应养护规范与标准
     maintenance_plan: str  # Agent最终生成的管养决策方案
 
+    # 记录 Agent 制定的执行步骤计划
+    plan: List[str]

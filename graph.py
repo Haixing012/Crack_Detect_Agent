@@ -1,60 +1,75 @@
-from typing import Literal
-
+from typing import Literal, List
+from pydantic import BaseModel, Field
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 
-from config import get_llm
+# 引入两个模型的配置
+from config import get_cloud_llm, get_local_llm
 from logger import get_logger
 from state import RoadDiseaseState
 from tools import get_retrieve_docs, predict_image_crack
-
 
 log = get_logger(__name__)
 tool_list = [predict_image_crack, get_retrieve_docs]
 memory = MemorySaver()
 
-def create_agent(llm, tools, system_message: str):
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            SystemMessage(
-                content="""
-你是一个AI代理，你需要根据用户的问题，使用以下工具来回答问题。
-使用提供的工具来推进问题的回答。
-如果你不知道怎么回答就说不知道。
+# --- 新增：定义计划的数据结构 ---
+class Plan(BaseModel):
+    steps: List[str] = Field(description="解决当前道路病害问题的具体步骤列表，通常包含识别、查规范、给方案等。")
+
+# --- 新增：规划节点 ---
+def planner_node(state: RoadDiseaseState):
+    log.info("进入 Planner 节点进行任务拆解")
+    messages = state.get("messages", [])
+    if not messages:
+        return {"plan": []}
+    
+    user_input = messages[-1].content
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "你是一个公路养护规划专家。请根据用户的需求，将其拆解为2到3个具体的执行步骤。如果涉及图片必须先进行视觉识别，如果涉及评估必须查阅规范。"),
+        ("user", "{input}")
+    ])
+    
+    # 使用本地小模型进行规划，并要求输出结构化数据
+    planner = prompt | get_local_llm().with_structured_output(Plan)
+    result = planner.invoke({"input": user_input})
+    
+    log.info(f"生成计划: {result.steps}")
+    return {"plan": result.steps}
+
+
+def create_agent(llm, tools):
+    # 把系统提示词硬编码进去了，因为后续会动态注入状态
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content="""
+你是一个道路养护执行Agent。你需要严格按照提供的计划步骤，使用合适的工具来推进问题的回答。
 在你的回答前加上FINAL ANSER，以便知道停止。
-不要告诉用户你使用的是什么视觉模型
-你可以使用以下工具：{tool_names}
-{system_prompt}
-"""
-            ),
-            MessagesPlaceholder("messages"),
-        ]
-    )
-    prompt = prompt.partial(system_prompt=system_message)
-    prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
+不要告诉用户你使用的是什么模型。
+"""),
+        ("system", "当前的执行计划是：\n{plan}"),
+        MessagesPlaceholder("messages"),
+    ])
     return prompt | llm.bind_tools(tools)
 
-
-llm = get_llm()
-agent = create_agent(
-    llm,
-    tool_list,
-    "你是一位道路养护专家，你需要按照公路养护技术手册判断道路病害。",
-)
-
+# 执行节点继续使用云端大模型
+cloud_llm = get_cloud_llm()
+agent = create_agent(cloud_llm, tool_list)
 
 def agent_decision(state: RoadDiseaseState):
     messages = state["messages"]
-    log.info("agent 节点执行，消息数: %s", len(messages))
-    result = agent.invoke(messages)
+    current_plan = "\n".join(state.get("plan", []))
+    log.info("agent 节点执行，依据计划执行任务")
+    
+    # 将当前的计划注入到提示词中
+    result = agent.invoke({"messages": messages, "plan": current_plan})
     return {"messages": result}
 
-
+# --- 其他不变 ---
 tools_node = ToolNode(tool_list)
-
 
 def route(state: RoadDiseaseState) -> Literal["tools", "end"]:
     messages = state.get("messages", [])
@@ -67,24 +82,27 @@ def route(state: RoadDiseaseState) -> Literal["tools", "end"]:
     log.info("路由到 end")
     return "end"
 
-
 def build_graph(need_draw: bool = False):
     builder = StateGraph(RoadDiseaseState)
+    
+    # 注册节点
+    builder.add_node("planner", planner_node)
     builder.add_node("agent", agent_decision)
     builder.add_node("tools", tools_node)
-    builder.add_edge(START, "agent")
+    
+    # 编排流程：START -> planner -> agent <-> tools -> END
+    builder.add_edge(START, "planner")
+    builder.add_edge("planner", "agent")
     builder.add_conditional_edges("agent", route, {"tools": "tools", "end": END})
     builder.add_edge("tools", "agent")
+    
     graph = builder.compile(checkpointer=memory)
-
     if need_draw:
         png_bytes = graph.get_graph().draw_mermaid_png()
         with open("workflow.png", "wb") as f:
             f.write(png_bytes)
         log.info("已生成流程图: workflow.png")
-
     return graph
 
-
 if __name__ == "__main__":
-    print(build_graph())
+  build_graph(True)
