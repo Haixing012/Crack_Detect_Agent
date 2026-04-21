@@ -1,5 +1,6 @@
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
+from typing import List,Optional
 
 from config import get_yolo
 from logger import get_logger
@@ -7,18 +8,20 @@ from rag import retrieve_docs
 from utils import PixelToRealConverter
 
 
+import json
+
 log = get_logger(__name__)
 yolo_model = get_yolo()
 
 
 @tool(description="使用YOLO模型识别图像中的裂缝信息。")
-def predict_image_crack(image_path: str) -> str:
+def predict_image_crack(image_path: str) -> json:
     """
     识别图片中的裂缝信息。
     参数:
     image_path: 图片文件路径
     返回:
-    str: 包含裂缝分类、定位和尺寸信息的格式化字符串
+    json: 包含裂缝分类、定位和尺寸信息
     """
     try:
         log.info("开始裂缝识别: %s", image_path)
@@ -47,18 +50,21 @@ def predict_image_crack(image_path: str) -> str:
             real_width_cm = converter.convert(width, gsd) / 10
             real_height_cm = converter.convert(height, gsd) / 10
 
-            output.append(
-                f"裂缝{i + 1} [{class_name}]: "
-                f"中心坐标({x_center:.1f}, {y_center:.1f}), "
-                f"尺寸{real_width_cm:.1f}cmx{real_height_cm:.1f}cm, "
-                f"置信度{confidence:.2f}"
-            )
+            output.append({
+                "id": i + 1,
+                "disease_type": class_name,
+                "confidence": round(confidence, 2),
+                "dimensions": {
+                    "width_cm": real_width_cm,
+                    "length_cm": real_height_cm
+                }
+            })
 
         if not output:
-            return "未检测到裂缝"
+            return json.dumps({"status": "success", "data": [], "message": "未检测到裂缝"}, ensure_ascii=False)
 
         log.info("裂缝识别完成，目标数: %s", len(output))
-        return "检测结果:\n" + "\n".join(output) + "\n请立即调用RAG检索。"
+        return json.dumps({"status": "success", "data": output}, ensure_ascii=False)
 
     except FileNotFoundError as e:
         log.exception("图片不存在: %s", image_path)
@@ -73,38 +79,47 @@ class RAGInput(BaseModel):
     width_cm: float = Field(0.0, description="宽度")
     length_cm: float = Field(0.0, description="长度")
 
+class DocumentDetail(BaseModel):
+    source: str = Field(description="规范文档名称或来源")
+    content: str = Field(description="具体的规范条文内容")
+    score: float = Field(description="检索匹配相关度评分")
+
+class RAGResponse(BaseModel):
+    status: str = Field(description="执行状态：success 或 failed")
+    data: List[DocumentDetail] = Field(default_factory=list, description="检索到的规范详情列表")
+    message: Optional[str] = Field(None, description="错误信息或提示")
+
 
 @tool(
-    description="""
-当你获取到病害类型和尺寸时，必须调用此工具。
-当需要评估病害严重等级或获取标准养护规范时，必须调用此工具。
-""",
+    description="评估病害严重等级或获取标准养护规范。",
     args_schema=RAGInput,
 )
 def get_retrieve_docs(
     disease_type: str, width_cm: float = 0.0, length_cm: float = 0.0
 ) -> str:
-    """当需要评估病害严重等级或获取标准养护规范时，必须调用此工具。"""
-    query = f"""
-请根据病害类型和尺寸，提供病害严重等级和标准养护规范。
-病害类型: {disease_type},
-宽度: {width_cm}cm,
-长度: {length_cm}cm
-"""
-    log.info("执行结构化 RAG 检索: disease_type=%s", disease_type)
-    return retrieve_docs(query, k=3, score_threshold=0.3)
+    """当获取到病害尺寸后，调用此工具获取对应的养护标准。"""
+    query = f"病害类型: {disease_type}, 尺寸: 宽{width_cm}cm, 长{length_cm}cm 的养护分级和措施"
+    log.info("执行结构化 RAG 检索")
+    
+    try:
+        docs = retrieve_docs(query)
+        if not docs:
+            return RAGResponse(status="failed", message="库中未找到匹配的养护规范").model_dump_json()
+        
+        # 返回标准的 JSON 字符串
+        return RAGResponse(status="success", data=docs).model_dump_json()
+    except Exception as e:
+        return RAGResponse(status="error", message=str(e)).model_dump_json()
 
-
-@tool(
-    description="""
-当用户提问道路病害相关信息时必须调用此工具查询《公路技术状况评定标准》。
-当需要评估病害严重等级或获取标准养护规范时，必须调用此工具。
-"""
-)
+@tool(description="查询《公路技术状况评定标准》中的相关信息。")
 def query_retrieve_docs(query: str) -> str:
+    """自由查询道路病害相关技术规范。"""
     log.info("执行自由查询 RAG 检索")
-    return retrieve_docs(query, k=3, score_threshold=0.3)
-
+    try:
+        docs = retrieve_docs(query)
+        return RAGResponse(status="success", data=docs).model_dump_json()
+    except Exception as e:
+        return RAGResponse(status="error", message=str(e)).model_dump_json()
 
 if __name__ == "__main__":
     pass

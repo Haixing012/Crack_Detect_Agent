@@ -6,8 +6,8 @@ log = get_logger(__name__)
 vector_store = get_chroma()
 
 
-def retrieve_docs(query: str, k: int = 2, score_threshold=None) -> str:
-    """搜索相似文本，可选相似度阈值过滤。"""
+def retrieve_docs(query: str, k: int = 2, score_threshold=None) -> list:
+    """搜索相似文本，返回结构化字典列表。"""
     results = vector_store.similarity_search_with_score(query=query, k=k)
 
     if score_threshold is not None:
@@ -16,15 +16,17 @@ def retrieve_docs(query: str, k: int = 2, score_threshold=None) -> str:
     log.info("RAG 检索完成，query=%s, 返回=%s", query[:40], len(results))
 
     if not results:
-        return "未检索到相关资料。"
+        return []
 
-    lines = []
-    for i, (doc, score) in enumerate(results, 1):
-        lines.append(f"文档 {i} (相似度 {score:.3f}):")
-        lines.append(f"来源: {doc.metadata.get('source', '未知')}")
-        lines.append(f"内容: {doc.page_content}")
-        lines.append("")
-    return "\n".join(lines).strip()
+    docs_data = []
+    for doc, score in results:
+        docs_data.append({
+            "source": doc.metadata.get('source', '未知'),
+            "similarity_score": round(float(score), 3),
+            "content": doc.page_content
+        })
+        
+    return docs_data
 
 
 if __name__ == "__main__":

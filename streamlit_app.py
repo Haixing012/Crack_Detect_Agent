@@ -4,7 +4,7 @@ from uuid import uuid4
 import streamlit as st
 
 from graph import build_graph
-
+from config import get_local_llm, get_cloud_llm
 
 UPLOAD_DIR = Path("temp_uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -60,6 +60,8 @@ def ask_agent(user_text: str, image_path: str = "") -> str:
 
 
 def main() -> None:
+    get_local_llm()
+    get_cloud_llm()
     st.set_page_config(page_title="路面病害智能问答", layout="wide")
     st.title("路面病害智能问答")
     st.caption("基于 YOLO + RAG + LangGraph 的 Streamlit 界面")

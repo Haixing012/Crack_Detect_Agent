@@ -30,7 +30,12 @@ def planner_node(state: RoadDiseaseState):
     user_input = messages[-1].content
     
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是一个公路养护规划专家。请根据用户的需求，将其拆解为2到3个具体的执行步骤。如果涉及图片必须先进行视觉识别，如果涉及评估必须查阅规范。"),
+        ("system", """
+            你是一个公路养护规划专家。
+            请根据用户的需求，将其拆解为2到3个具体的执行步骤。
+            如果涉及图片必须先进行视觉识别，如果涉及评估必须查阅规范。
+            视觉识别能够自动读取本地或者在线图片
+          """),
         ("user", "{input}")
     ])
     
@@ -41,6 +46,32 @@ def planner_node(state: RoadDiseaseState):
     log.info(f"生成计划: {result.steps}")
     return {"plan": result.steps}
 
+def reporter_node(state: RoadDiseaseState):
+    log.info("进入 Reporter 节点，生成最终养护方案")
+    messages = state.get("messages", [])
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """你是一位资深的公路养护总工。
+请仔细阅读对话历史中工具返回的 JSON 结构化数据（包含视觉识别结果和规范检索结果）。
+请严格基于这些客观数据，输出一份专业的《路面病害评估与养护方案》。
+
+报告要求结构清晰，包含：
+1. 病害基本信息 (汇总识别到的类型、尺寸)
+2. 规范判定依据 (引用检索到的规范条文)
+3. 处治措施建议 (基于规范给出的具体施工步骤)
+
+注意：
+- 绝不允许编造任何尺寸或数据！如果工具数据为空或失败，请如实说明。
+- 不要暴露底层的 JSON 格式，直接输出排版良好的专业文字报告。
+- 不允许再调用任何工具。"""),
+        MessagesPlaceholder("messages"),
+    ])
+    
+    # 确保这里使用的是云端大模型，且没有 bind_tools
+    chain = prompt | get_cloud_llm() 
+    result = chain.invoke({"messages": messages})
+    
+    return {"maintenance_plan": result.content, "messages": [result]}
 
 def create_agent(llm, tools):
     # 把系统提示词硬编码进去了，因为后续会动态注入状态
@@ -88,13 +119,16 @@ def build_graph(need_draw: bool = False):
     # 注册节点
     builder.add_node("planner", planner_node)
     builder.add_node("agent", agent_decision)
+    builder.add_node("reporter", reporter_node)
     builder.add_node("tools", tools_node)
     
-    # 编排流程：START -> planner -> agent <-> tools -> END
+    
+    # 编排流程
     builder.add_edge(START, "planner")
     builder.add_edge("planner", "agent")
-    builder.add_conditional_edges("agent", route, {"tools": "tools", "end": END})
     builder.add_edge("tools", "agent")
+    builder.add_conditional_edges("agent", route, {"tools": "tools", "end": "reporter"})
+    builder.add_edge("reporter", END)
     
     graph = builder.compile(checkpointer=memory)
     if need_draw:
