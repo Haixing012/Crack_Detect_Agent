@@ -11,6 +11,7 @@ env/
 .env
 .env.*
 !.env.example
+config.yaml
 
 # Local data/artifacts
 chroma_db/*
