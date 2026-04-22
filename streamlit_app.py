@@ -402,7 +402,9 @@ def ask_agent_stream(user_text: str, image_path: str = ""):
                     # ==================== Agent 节点 ====================
                     elif node_name == "agent":
                         st.markdown("#### 🧠 Agent 决策")
-                        msgs = state.get("messages", [])
+                        raw_msgs = state.get("messages", [])
+                        # agent 节点可能返回单个 AIMessage 或列表，统一处理
+                        msgs = raw_msgs if isinstance(raw_msgs, list) else [raw_msgs]
                         if msgs:
                             last_msg = msgs[-1]
                             # 检查是否有工具调用
@@ -425,7 +427,8 @@ def ask_agent_stream(user_text: str, image_path: str = ""):
                     # ==================== Tools 节点 ====================
                     elif node_name == "tools":
                         st.markdown("#### 🔧 工具执行结果")
-                        msgs = state.get("messages", [])
+                        raw_msgs = state.get("messages", [])
+                        msgs = raw_msgs if isinstance(raw_msgs, list) else [raw_msgs]
                         for msg in msgs:
                             # 工具返回的消息有 name 属性标识来源
                             tool_name = getattr(msg, "name", None)
@@ -457,7 +460,9 @@ def ask_agent_stream(user_text: str, image_path: str = ""):
                         st.markdown("#### 📝 正在生成养护方案报告...")
                         answer = state.get("maintenance_plan", "")
                         if not answer and state.get("messages"):
-                            answer = state["messages"][-1].content
+                            raw_msgs = state["messages"]
+                            last_msg = raw_msgs[-1] if isinstance(raw_msgs, list) else raw_msgs
+                            answer = getattr(last_msg, "content", "")
 
             status.update(label="✅ 分析完成！", state="complete", expanded=False)
 
