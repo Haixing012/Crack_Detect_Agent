@@ -27,3 +27,4 @@ models/*
 Thumbs.db
 .idea/
 .vscode/
+.codebuddy/

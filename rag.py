@@ -17,7 +17,14 @@ def _get_vector_store():
 def retrieve_docs(query: str, k: int = 2, score_threshold=None) -> list:
     """搜索相似文本，返回结构化字典列表。"""
     store = _get_vector_store()
-    results = store.similarity_search_with_score(query=query, k=k)
+    try:
+        results = store.similarity_search_with_score(query=query, k=k)
+    except ConnectionError as e:
+        log.error("RAG 检索失败：无法连接 Ollama 服务，请确认 ollama serve 已启动。%s", str(e))
+        return []
+    except Exception as e:
+        log.exception("RAG 检索异常")
+        return []
 
     if score_threshold is not None:
         results = [(doc, score) for doc, score in results if score <= score_threshold]
@@ -31,7 +38,7 @@ def retrieve_docs(query: str, k: int = 2, score_threshold=None) -> list:
     for doc, score in results:
         docs_data.append({
             "source": doc.metadata.get('source', '未知'),
-            "similarity_score": round(float(score), 3),
+            "score": round(float(score), 3),
             "content": doc.page_content
         })
         

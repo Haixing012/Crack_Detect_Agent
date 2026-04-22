@@ -38,13 +38,15 @@ def planner_node(state: RoadDiseaseState):
     prompt = ChatPromptTemplate.from_messages([
         ("system", """
             你是一个公路养护规划专家。
-
+            现在需要你拆解用户的输入意图，并给出后续的执行步骤。
+            如果涉及图片必须先进行视觉识别，如果涉及评估必须查阅规范。
+            视觉识别能够自动读取本地或者在线图片
             你必须严格按照 **JSON 格式** 输出结果。
             不要输出任何解释、说明或多余文本。
 
             输出格式示例：
             {{
-              "steps": ["步骤1", "步骤2", "步骤3"]
+              "steps": ["步骤1xxxx", "步骤2xxxx", "步骤3xxxx"]
             }}
 
             规则：
@@ -57,7 +59,7 @@ def planner_node(state: RoadDiseaseState):
     ])
     
     # 使用本地小模型进行规划，并要求输出结构化数据
-    planner = prompt | get_local_llm().with_structured_output(Plan)
+    planner = prompt | get_cloud_llm("xunfei_qwen").with_structured_output(Plan)
     result = planner.invoke({"input": user_input})
     
     log.info(f"生成计划: {result.steps}")

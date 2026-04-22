@@ -26,9 +26,9 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 @lru_cache(maxsize=1)
-def get_cloud_llm():
+def get_cloud_llm(model="deepseek"):
     """获取云端大模型，用于复杂推理和工具调用"""
-    cfg = load_config()["llm"]["cloud"]
+    cfg = load_config()["llm"]["cloud"][model]
     log.info("初始化云端 LLM: model=%s", cfg["model"])
     return ChatOpenAI(
         base_url=cfg["base_url"],
@@ -74,3 +74,6 @@ def get_yolo():
         raise FileNotFoundError(f"YOLO 模型不存在: {model_path}")
     log.info("加载 YOLO 模型: %s", model_path)
     return YOLO(str(model_path))
+
+if __name__ == "__main__":
+    print(get_chroma())

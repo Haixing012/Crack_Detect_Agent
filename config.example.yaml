@@ -1,12 +1,22 @@
 llm:
   cloud:
-    base_url: ""
-    api_key: ""
-    model: ""
+    model_name_1:
+      base_url: ""
+      api_key: ""
+      model: ""
+    model_name_2:
+      base_url: ""
+      api_key: ""
+      model: ""
   local:
-    base_url: "http://localhost:11434/v1"
-    api_key: ""          # 本地模型填任意值即可
-    model: ""
+    model_name_1:
+      base_url: ""
+      api_key: ""
+      model: ""
+    model_name_2:
+      base_url: ""
+      api_key: ""
+      model: ""
 
 embedding:
   model: ""
