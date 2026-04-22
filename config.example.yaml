@@ -5,12 +5,23 @@ llm:
     model: ""
   local:
     base_url: "http://localhost:11434/v1"
-    api_key: ""  # 本地模型填任意值即可
+    api_key: ""          # 本地模型填任意值即可
     model: ""
 
 embedding:
   model: ""
 
 paths:
-  chroma_dir: ""
-  yolo_model: ""
+  chroma_dir: "./chroma_db"
+  yolo_model: "./models/11nbase.pt"
+
+# Agent 行为参数
+agent:
+  max_message_count: 12     # 熔断阈值：消息数超过此值强制进入 reporter 节点
+
+# YOLO 检测的 GSD（地面采样距离）参数
+gsd:
+  altitude_m: 5.0            # 无人机飞行高度（米）
+  focal_length_mm: 4.5       # 镜头焦距（毫米）
+  sensor_width_mm: 6.4       # 传感器宽度（毫米）
+  image_width_px: 640        # 图像宽度（像素）

@@ -12,13 +12,16 @@ from logger import get_logger
 
 log = get_logger(__name__)
 
+# 获取项目根目录：基于当前脚本所在目录向上定位
+_PROJECT_ROOT = Path(__file__).parent.resolve()
+
 @lru_cache(maxsize=1)
 def load_config() -> dict:
-    """加载并缓存 YAML 配置"""
-    config_path = Path("config.yaml")
+    """加载并缓存 YAML 配置，路径基于脚本所在目录解析"""
+    config_path = _PROJECT_ROOT / "config.yaml"
     if not config_path.exists():
-        raise FileNotFoundError("未找到 config.yaml 文件")
-    
+        raise FileNotFoundError(f"未找到配置文件: {config_path}\n请复制 config.example.yaml 为 config.yaml 并填写配置")
+
     with open(config_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -49,7 +52,10 @@ def get_local_llm():
 @lru_cache(maxsize=1)
 def get_chroma():
     cfg = load_config()
-    persist_dir = Path(cfg["paths"]["chroma_dir"]).resolve()
+    # 支持相对路径（基于项目根目录）和绝对路径
+    chroma_dir = cfg["paths"]["chroma_dir"]
+    persist_dir = (Path(chroma_dir) if Path(chroma_dir).is_absolute()
+                   else _PROJECT_ROOT / chroma_dir).resolve()
     log.info("初始化 Chroma: dir=%s", persist_dir)
     model = OllamaEmbeddings(model=cfg["embedding"]["model"])
     return Chroma(
@@ -61,7 +67,9 @@ def get_chroma():
 @lru_cache(maxsize=1)
 def get_yolo():
     cfg = load_config()
-    model_path = Path(cfg["paths"]["yolo_model"]).resolve()
+    yolo_path = cfg["paths"]["yolo_model"]
+    model_path = (Path(yolo_path) if Path(yolo_path).is_absolute()
+                  else _PROJECT_ROOT / yolo_path).resolve()
     if not model_path.exists():
         raise FileNotFoundError(f"YOLO 模型不存在: {model_path}")
     log.info("加载 YOLO 模型: %s", model_path)

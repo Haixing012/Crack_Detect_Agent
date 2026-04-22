@@ -1,17 +1,24 @@
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from typing import List,Optional
-
-from config import get_yolo
-from logger import get_logger
-from rag import retrieve_docs
 from utils import PixelToRealConverter
-
 
 import json
 
-log = get_logger(__name__)
-yolo_model = get_yolo()
+log = None
+_yolo_model = None
+
+
+def _get_yolo_model():
+    """惰性加载 YOLO 模型，仅在首次工具调用时初始化"""
+    global _yolo_model, log
+    if _yolo_model is None:
+        from config import get_yolo
+        from logger import get_logger
+        if log is None:
+            log = get_logger(__name__)
+        _yolo_model = get_yolo()
+    return _yolo_model
 
 
 @tool(description="使用YOLO模型识别图像中的裂缝信息。")
@@ -24,7 +31,9 @@ def predict_image_crack(image_path: str) -> json:
     json: 包含裂缝分类、定位和尺寸信息
     """
     try:
-        log.info("开始裂缝识别: %s", image_path)
+        _log = log or __import__("logger").get_logger(__name__)
+        _log.info("开始裂缝识别: %s", image_path)
+        yolo_model = _get_yolo_model()
         results = yolo_model(image_path)
         class_names = yolo_model.names if hasattr(yolo_model, "names") else {}
 
@@ -34,11 +43,15 @@ def predict_image_crack(image_path: str) -> json:
         result = results[0]
         output = []
         converter = PixelToRealConverter()
+
+        # 从配置文件读取 GSD 参数，避免硬编码
+        _cfg = __import__("config").load_config()
+        gsd_cfg = _cfg.get("gsd", {})
         gsd = converter.calculate_gsd_by_drone(
-            altitude_m=5.0,
-            focal_length_mm=4.5,
-            sensor_width_mm=6.4,
-            image_width_px=640,
+            altitude_m=gsd_cfg.get("altitude_m", 5.0),
+            focal_length_mm=gsd_cfg.get("focal_length_mm", 4.5),
+            sensor_width_mm=gsd_cfg.get("sensor_width_mm", 6.4),
+            image_width_px=gsd_cfg.get("image_width_px", 640),
         )
 
         for i, box in enumerate(result.boxes):
@@ -63,14 +76,17 @@ def predict_image_crack(image_path: str) -> json:
         if not output:
             return json.dumps({"status": "success", "data": [], "message": "未检测到裂缝"}, ensure_ascii=False)
 
-        log.info("裂缝识别完成，目标数: %s", len(output))
+        _log = log or __import__("logger").get_logger(__name__)
+        _log.info("裂缝识别完成，目标数: %s", len(output))
         return json.dumps({"status": "success", "data": output}, ensure_ascii=False)
 
     except FileNotFoundError as e:
-        log.exception("图片不存在: %s", image_path)
+        _log = log or __import__("logger").get_logger(__name__)
+        _log.exception("图片不存在: %s", image_path)
         return f"错误: 文件未找到 {str(e)}"
     except Exception as e:
-        log.exception("裂缝识别异常")
+        _log = log or __import__("logger").get_logger(__name__)
+        _log.exception("裂缝识别异常")
         return f"预测过程中发生错误: {str(e)}"
 
 
@@ -98,8 +114,10 @@ def get_retrieve_docs(
     disease_type: str, width_cm: float = 0.0, length_cm: float = 0.0
 ) -> str:
     """当获取到病害尺寸后，调用此工具获取对应的养护标准。"""
+    from rag import retrieve_docs  # 延迟导入避免模块级依赖
     query = f"病害类型: {disease_type}, 尺寸: 宽{width_cm}cm, 长{length_cm}cm 的养护分级和措施"
-    log.info("执行结构化 RAG 检索")
+    _log = log or __import__("logger").get_logger(__name__)
+    _log.info("执行结构化 RAG 检索")
     
     try:
         docs = retrieve_docs(query)
@@ -107,16 +125,6 @@ def get_retrieve_docs(
             return RAGResponse(status="failed", message="库中未找到匹配的养护规范").model_dump_json()
         
         # 返回标准的 JSON 字符串
-        return RAGResponse(status="success", data=docs).model_dump_json()
-    except Exception as e:
-        return RAGResponse(status="error", message=str(e)).model_dump_json()
-
-@tool(description="查询《公路技术状况评定标准》中的相关信息。")
-def query_retrieve_docs(query: str) -> str:
-    """自由查询道路病害相关技术规范。"""
-    log.info("执行自由查询 RAG 检索")
-    try:
-        docs = retrieve_docs(query)
         return RAGResponse(status="success", data=docs).model_dump_json()
     except Exception as e:
         return RAGResponse(status="error", message=str(e)).model_dump_json()

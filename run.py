@@ -1,8 +1,21 @@
+from langchain_core.messages import HumanMessage, AIMessage
+
 from graph import build_graph
 from logger import get_logger
 from config import get_cloud_llm,get_local_llm
 
 log = get_logger(__name__)
+
+
+def convert_chat_history_to_messages(chat_history: list) -> list:
+    """将 (role, content) 元组历史转换为 BaseMessage 列表"""
+    messages = []
+    for role, content in chat_history:
+        if role == "human":
+            messages.append(HumanMessage(content=content))
+        elif role == "ai":
+            messages.append(AIMessage(content=content))
+    return messages
 
 
 def main() -> None:
@@ -31,12 +44,17 @@ def main() -> None:
         log.info("收到用户输入，当前历史消息数: %s", len(chat_history))
 
         try:
-            for chunk in app.stream({"messages": chat_history},config=config):
+            messages_input = convert_chat_history_to_messages(chat_history)
+            for chunk in app.stream({"messages": messages_input},config=config):
                 for node_name, state in chunk.items():
-                    msg = state.get("messages")
-                    if msg and hasattr(msg, "content"):
-                        print(f"[{node_name}]: {msg.content}")
-                        print("-" * 30)
+                    msgs = state.get("messages", [])
+                    if isinstance(msgs, list) and len(msgs) > 0:
+                        # 取最后一条有内容的消息
+                        for m in reversed(msgs):
+                            if hasattr(m, "content") and m.content and not hasattr(m, "tool_calls"):
+                                print(f"[{node_name}]: {m.content}")
+                                print("-" * 30)
+                                break
         except Exception:
             log.exception("图执行失败")
             print("执行失败，请查看日志。")

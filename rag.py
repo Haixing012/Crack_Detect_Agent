@@ -3,12 +3,21 @@ from logger import get_logger
 
 
 log = get_logger(__name__)
-vector_store = get_chroma()
+_vector_store = None
+
+
+def _get_vector_store():
+    """惰性加载 Chroma 向量库"""
+    global _vector_store
+    if _vector_store is None:
+        _vector_store = get_chroma()
+    return _vector_store
 
 
 def retrieve_docs(query: str, k: int = 2, score_threshold=None) -> list:
     """搜索相似文本，返回结构化字典列表。"""
-    results = vector_store.similarity_search_with_score(query=query, k=k)
+    store = _get_vector_store()
+    results = store.similarity_search_with_score(query=query, k=k)
 
     if score_threshold is not None:
         results = [(doc, score) for doc, score in results if score <= score_threshold]

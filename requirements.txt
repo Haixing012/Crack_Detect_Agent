@@ -1,9 +1,23 @@
-langchain-core
-langgraph
-langchain-openai
-langchain-ollama
-langchain-chroma
-ultralytics
-pydantic
-python-dotenv
-streamlit
+# === 核心框架 ===
+langchain-core>=0.3
+langgraph>=0.2
+
+# === LLM 接入 ===
+langchain-openai>=0.2
+langchain-ollama>=0.2
+
+# === 向量数据库 ===
+langchain-chroma>=0.1
+
+# === 视觉识别 ===
+ultralytics>=8.3,<9.0
+
+# === 数据校验 ===
+pydantic>=2.5
+
+# === 配置管理 ===
+pyyaml>=6.0
+python-dotenv>=1.0
+
+# === Web UI ===
+streamlit>=1.37

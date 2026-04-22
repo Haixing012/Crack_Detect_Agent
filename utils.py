@@ -1,6 +1,5 @@
 class PixelToRealConverter:
-    def __init__(self):
-        pass
+    """像素到真实尺寸换算工具类"""
 
     @staticmethod
     def calculate_gsd_by_drone(altitude_m: float, focal_length_mm: float, sensor_width_mm: float, image_width_px: int) -> float:
